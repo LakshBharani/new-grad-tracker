@@ -82,6 +82,14 @@ WHERE u.resume_url IS NOT NULL
     SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.storage_path = u.resume_url
   );
 
+-- Generic key→JSON cache for group-wide AI results (e.g. GC skill insights).
+CREATE TABLE IF NOT EXISTS ai_cache (
+  key         text PRIMARY KEY,
+  value_json  text NOT NULL,
+  created_at  text NOT NULL DEFAULT iso_now(),
+  updated_at  text NOT NULL DEFAULT iso_now()
+);
+
 -- ─── Row Level Security ─────────────────────────────────────────────────────
 -- The app uses NextAuth (server-side) and connects with the Postgres role,
 -- not via Supabase Auth, so RLS is not enforced for app traffic. We still
@@ -92,6 +100,7 @@ ALTER TABLE users        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resumes      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_cache       ENABLE ROW LEVEL SECURITY;
 
 -- (No policies defined → all PostgREST access is denied. The Node app
 --  connects with the Postgres user from DATABASE_URL which bypasses RLS.)

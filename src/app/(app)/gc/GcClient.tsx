@@ -1,11 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { GcInsights } from "@/components/GcInsights";
 import { ListingWithMeta } from "@/lib/types";
 
 type User = { id: string; name: string; email: string };
@@ -125,10 +128,20 @@ export function GcClient({ listings, users, currentUserId }: Props) {
                   </div>
                 ))}
               </div>
+              <Link
+                href={`/profile/${user.id}`}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-md border border-gray-200 py-2 text-xs font-semibold text-gray-600 transition-colors hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+              >
+                View profile
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* AI skill insights */}
+      <GcInsights />
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-5">

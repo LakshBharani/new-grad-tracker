@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, listings, applications, resumes } from "./schema";
-import { eq, and, isNull, isNotNull, desc } from "drizzle-orm";
+import { users, listings, applications, resumes, aiCache } from "./schema";
+import { eq, and, isNull, isNotNull, desc, like } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type { UserApplicationRow, ListingWithMeta } from "./types";
 
@@ -75,6 +75,49 @@ export async function updateResume(id: string, data: { label: string }) {
 
 export async function deleteResume(id: string) {
   await db.delete(resumes).where(eq(resumes.id, id));
+}
+
+// ─── AI: cache ────────────────────────────────────────────────────────────────
+
+export async function getAiCache(key: string) {
+  const r = await db.select().from(aiCache).where(eq(aiCache.key, key)).limit(1);
+  return r[0] ?? null;
+}
+
+export async function setAiCache(key: string, valueJson: string) {
+  const now = new Date().toISOString();
+  const existing = await getAiCache(key);
+  if (existing) {
+    await db.update(aiCache).set({ valueJson, updatedAt: now }).where(eq(aiCache.key, key));
+  } else {
+    await db.insert(aiCache).values({ key, valueJson });
+  }
+  return getAiCache(key);
+}
+
+// Resume-review ATS scores are cached per (user, listing) under this key prefix.
+function reviewKey(userId: string, listingId: string) {
+  return `review:${userId}:${listingId}`;
+}
+
+export async function saveReviewScore(userId: string, listingId: string, atsScore: number) {
+  return setAiCache(reviewKey(userId, listingId), JSON.stringify({ atsScore, updatedAt: new Date().toISOString() }));
+}
+
+/** Map of listingId → latest ATS score for a user (for the My Tracker gauges). */
+export async function getReviewScoresForUser(userId: string): Promise<Record<string, number>> {
+  const prefix = `review:${userId}:`;
+  const rows = await db.select().from(aiCache).where(like(aiCache.key, `${prefix}%`));
+  const map: Record<string, number> = {};
+  for (const r of rows) {
+    try {
+      const v = JSON.parse(r.valueJson);
+      if (typeof v.atsScore === "number") map[r.key.slice(prefix.length)] = v.atsScore;
+    } catch {
+      /* skip malformed */
+    }
+  }
+  return map;
 }
 
 // ─── Listings ─────────────────────────────────────────────────────────────────

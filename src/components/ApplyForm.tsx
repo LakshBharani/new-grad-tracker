@@ -51,6 +51,11 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
 
   const set = (k: keyof FormData, v: string | boolean | null) => setForm((f) => ({ ...f, [k]: v }));
 
+  // When the status is still "Interested" the user hasn't applied yet, so the
+  // application details (date, resume, referral, notes) are locked until they
+  // move the status to Applied or beyond.
+  const locked = form.status === "INTERESTED";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -77,8 +82,14 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
             ))}
           </SelectContent>
         </Select>
+        {locked && (
+          <p className="text-xs text-gray-400">
+            Set status to <span className="font-medium text-gray-500">Applied</span> (or beyond) to fill in the details below.
+          </p>
+        )}
       </div>
 
+      <fieldset disabled={locked} className={`space-y-4 border-0 p-0 m-0 ${locked ? "opacity-50" : ""}`}>
       <div className="space-y-1">
         <label className="text-sm font-medium text-gray-700">Applied Date</label>
         <Input type="date" value={form.appliedAt} onChange={(e) => set("appliedAt", e.target.value)} />
@@ -89,6 +100,7 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
         <Select
           value={form.resumeId ?? NONE}
           onValueChange={(v) => set("resumeId", v === NONE ? null : v)}
+          disabled={locked}
         >
           <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
           <SelectContent>
@@ -98,7 +110,7 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
             ))}
           </SelectContent>
         </Select>
-        {resumes.length === 0 && (
+        {resumes.length === 0 && !locked && (
           <p className="text-xs text-gray-400">
             No resumes yet — add one on the Resumes page to track which you used.
           </p>
@@ -133,6 +145,7 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
         <Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)}
           placeholder="Interview prep notes, recruiter name, comp info..." rows={3} />
       </div>
+      </fieldset>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex justify-end gap-2 pt-2">

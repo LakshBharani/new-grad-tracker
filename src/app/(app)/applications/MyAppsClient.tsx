@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ResumeReviewDialog } from "@/components/ResumeReviewDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserApplicationRow, STATUS_ORDER, STATUS_LABELS, EVENT_STAGES, INTERVIEW_STAGES } from "@/lib/types";
@@ -22,6 +23,7 @@ type AppWithListing = UserApplicationRow & {
 type Props = {
   initialApps: AppWithListing[];
   currentUserId: string;
+  reviewScores: Record<string, number>;
 };
 
 // Dot color per status — used in the menu items only. Chip itself is grayscale.
@@ -44,7 +46,7 @@ const STATUS_GROUPS: { label: string; statuses: string[] }[] = [
 
 type PendingEdit = { status: string; interviewRound: number | null; eventAt: string | null };
 
-export function MyAppsClient({ initialApps, currentUserId }: Props) {
+export function MyAppsClient({ initialApps, currentUserId, reviewScores }: Props) {
   const [apps, setApps] = useState(initialApps);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -218,6 +220,145 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
     setApps((prev) => prev.filter((a) => a.id !== appId));
   };
 
+  // Shared status menu used by both the "Apply" split-button (status INTERESTED)
+  // and the status pill (any other status), so both behave identically.
+  const statusMenu = (app: AppWithListing) =>
+    pendingEdit && (
+      <div
+        role="menu"
+        className="absolute top-full right-0 mt-1.5 z-20 w-64 rounded-lg border border-gray-200 bg-white shadow-xl p-1.5"
+      >
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => setPendingEdit((p) => p ? { ...p, status: "INTERESTED", eventAt: null } : null)}
+          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
+            pendingEdit.status === "INTERESTED" ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          <span className="h-2 w-2 rounded-full shrink-0 bg-gray-300" />
+          <span className="flex-1 text-left">Not Applied</span>
+          {app.status === "INTERESTED" && pendingEdit.status !== "INTERESTED" && (
+            <span className="text-[10px] text-gray-400">current</span>
+          )}
+        </button>
+        {STATUS_GROUPS.map((group) => (
+          <div key={group.label} className="mt-1 pt-1 border-t border-gray-100">
+            <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              {group.label}
+            </p>
+            {group.statuses.map((s) => {
+              const c = STATUS_CHIP[s];
+              const selected = s === pendingEdit.status;
+              const isCurrent = s === app.status;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => setPendingEdit((p) => p ? {
+                    ...p,
+                    status: s,
+                    interviewRound: INTERVIEW_STAGES.includes(s) ? (p.interviewRound ?? 1) : p.interviewRound,
+                    eventAt: EVENT_STAGES.includes(s) ? p.eventAt : null,
+                  } : null)}
+                  className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
+                    selected ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${c.dot}`} />
+                  <span className="flex-1 text-left">{STATUS_LABELS[s]}</span>
+                  {isCurrent && !selected && <span className="text-[10px] text-gray-400">current</span>}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+
+        {INTERVIEW_STAGES.includes(pendingEdit.status) && (
+          <div className="mt-1 pt-2 border-t border-gray-100 px-1">
+            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              Round
+            </p>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((n) => {
+                const active = (pendingEdit.interviewRound ?? 1) === n;
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setPendingEdit((p) => p ? { ...p, interviewRound: n, eventAt: null } : null)}
+                    className={`h-7 flex-1 rounded text-[11px] font-bold tabular-nums transition-colors ${
+                      active ? "bg-gray-800 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    R{n}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setPendingEdit((p) => p ? { ...p, interviewRound: Math.max(6, (p.interviewRound ?? 1) + 1), eventAt: null } : null)}
+                title="Add a round"
+                className={`h-7 px-1.5 min-w-[28px] rounded text-[11px] font-bold tabular-nums transition-colors flex items-center justify-center gap-0.5 ${
+                  (pendingEdit.interviewRound ?? 1) >= 6
+                    ? "bg-gray-800 text-white"
+                    : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                }`}
+              >
+                {(pendingEdit.interviewRound ?? 1) >= 6 && <span>R{pendingEdit.interviewRound}</span>}
+                <Plus className="h-2.5 w-2.5" strokeWidth={3} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {EVENT_STAGES.includes(pendingEdit.status) && (
+          <div className="mt-2 pt-2 border-t border-gray-100 px-1">
+            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              Reminder date
+            </p>
+            <input
+              type="datetime-local"
+              value={(pendingEdit.eventAt ?? "").slice(0, 16)}
+              onChange={(e) => setPendingEdit((p) => p ? { ...p, eventAt: e.target.value || null } : null)}
+              className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-300"
+            />
+            {pendingEdit.eventAt && (
+              <button
+                type="button"
+                onClick={() => setPendingEdit((p) => p ? { ...p, eventAt: null } : null)}
+                className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Clear date
+              </button>
+            )}
+          </div>
+        )}
+
+        {saveError && (
+          <p className="mt-1 px-1 text-[10px] text-red-500">{saveError}</p>
+        )}
+        <div className="mt-2 pt-2 border-t border-gray-100 px-1 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setPendingEdit((p) => p ? { ...p, status: "INTERESTED", interviewRound: null, eventAt: null } : null)}
+            className="flex-1 h-8 rounded-md border border-gray-200 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={() => handleUpdate(app)}
+            disabled={pendingSaving}
+            className="flex-1 h-8 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+          >
+            {pendingSaving ? "Saving…" : "Update"}
+          </button>
+        </div>
+      </div>
+    );
+
   return (
     <div className="space-y-5">
       <div>
@@ -342,58 +483,7 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                         <ChevronDown className="h-3.5 w-3.5" />
                       </button>
                     </div>
-                    {openMenuId === app.id && pendingEdit && (
-                      <div
-                        role="menu"
-                        className="absolute top-full right-0 mt-1.5 z-20 w-64 rounded-lg border border-gray-200 bg-white shadow-xl p-1.5"
-                      >
-                        {STATUS_GROUPS.map((group, gi) => (
-                          <div key={group.label} className={gi > 0 ? "mt-1 pt-1 border-t border-gray-100" : ""}>
-                            <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                              {group.label}
-                            </p>
-                            {group.statuses.map((s) => {
-                              const c = STATUS_CHIP[s];
-                              const selected = s === pendingEdit.status;
-                              const isCurrent = s === app.status;
-                              return (
-                                <button
-                                  key={s}
-                                  type="button"
-                                  role="menuitem"
-                                  onClick={() => setPendingEdit((p) => p ? {
-                                    ...p,
-                                    status: s,
-                                    interviewRound: INTERVIEW_STAGES.includes(s) ? (p.interviewRound ?? 1) : p.interviewRound,
-                                    eventAt: EVENT_STAGES.includes(s) ? p.eventAt : null,
-                                  } : null)}
-                                  className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
-                                    selected ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                                  }`}
-                                >
-                                  <span className={`h-2 w-2 rounded-full shrink-0 ${c.dot}`} />
-                                  <span className="flex-1 text-left">{STATUS_LABELS[s]}</span>
-                                  {isCurrent && !selected && <span className="text-[10px] text-gray-400">current</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))}
-                        {saveError && (
-                          <p className="mt-1 px-1 text-[10px] text-red-500">{saveError}</p>
-                        )}
-                        <div className="mt-2 pt-2 border-t border-gray-100 px-1">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdate(app)}
-                            disabled={pendingSaving}
-                            className="w-full h-8 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                          >
-                            {pendingSaving ? "Saving…" : "Update"}
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    {openMenuId === app.id && statusMenu(app)}
                   </div>
                 ) : (
                   <div className="relative" data-apply-split>
@@ -415,138 +505,7 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                             <span className="truncate">{STATUS_LABELS[app.status]}</span>
                             <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                           </button>
-                          {isOpen && pendingEdit && (
-                            <div
-                              role="menu"
-                              className="absolute top-full right-0 mt-1.5 z-20 w-64 rounded-lg border border-gray-200 bg-white shadow-xl p-1.5"
-                            >
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => setPendingEdit((p) => p ? { ...p, status: "INTERESTED", eventAt: null } : null)}
-                                className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
-                                  pendingEdit.status === "INTERESTED" ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                                }`}
-                              >
-                                <span className="h-2 w-2 rounded-full shrink-0 bg-gray-300" />
-                                <span className="flex-1 text-left">Not applied</span>
-                              </button>
-                              {STATUS_GROUPS.map((group) => (
-                                <div key={group.label} className="mt-1 pt-1 border-t border-gray-100">
-                                  <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                                    {group.label}
-                                  </p>
-                                  {group.statuses.map((s) => {
-                                    const c = STATUS_CHIP[s];
-                                    const selected = s === pendingEdit.status;
-                                    const isCurrent = s === app.status;
-                                    return (
-                                      <button
-                                        key={s}
-                                        type="button"
-                                        role="menuitem"
-                                        onClick={() => setPendingEdit((p) => p ? {
-                                          ...p,
-                                          status: s,
-                                          interviewRound: INTERVIEW_STAGES.includes(s) ? (p.interviewRound ?? 1) : p.interviewRound,
-                                          eventAt: EVENT_STAGES.includes(s) ? p.eventAt : null,
-                                        } : null)}
-                                        className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
-                                          selected ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
-                                        }`}
-                                      >
-                                        <span className={`h-2 w-2 rounded-full shrink-0 ${c.dot}`} />
-                                        <span className="flex-1 text-left">{STATUS_LABELS[s]}</span>
-                                        {isCurrent && !selected && <span className="text-[10px] text-gray-400">current</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              ))}
-
-                              {INTERVIEW_STAGES.includes(pendingEdit.status) && (
-                                <div className="mt-1 pt-2 border-t border-gray-100 px-1">
-                                  <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                                    Round
-                                  </p>
-                                  <div className="flex items-center gap-1">
-                                    {[1, 2, 3, 4, 5].map((n) => {
-                                      const active = (pendingEdit.interviewRound ?? 1) === n;
-                                      return (
-                                        <button
-                                          key={n}
-                                          type="button"
-                                          onClick={() => setPendingEdit((p) => p ? { ...p, interviewRound: n, eventAt: null } : null)}
-                                          className={`h-7 flex-1 rounded text-[11px] font-bold tabular-nums transition-colors ${
-                                            active ? "bg-gray-800 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-                                          }`}
-                                        >
-                                          R{n}
-                                        </button>
-                                      );
-                                    })}
-                                    <button
-                                      type="button"
-                                      onClick={() => setPendingEdit((p) => p ? { ...p, interviewRound: Math.max(6, (p.interviewRound ?? 1) + 1), eventAt: null } : null)}
-                                      title="Add a round"
-                                      className={`h-7 px-1.5 min-w-[28px] rounded text-[11px] font-bold tabular-nums transition-colors flex items-center justify-center gap-0.5 ${
-                                        (pendingEdit.interviewRound ?? 1) >= 6
-                                          ? "bg-gray-800 text-white"
-                                          : "bg-gray-50 text-gray-400 hover:bg-gray-100"
-                                      }`}
-                                    >
-                                      {(pendingEdit.interviewRound ?? 1) >= 6 && <span>R{pendingEdit.interviewRound}</span>}
-                                      <Plus className="h-2.5 w-2.5" strokeWidth={3} />
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {EVENT_STAGES.includes(pendingEdit.status) && (
-                                <div className="mt-2 pt-2 border-t border-gray-100 px-1">
-                                  <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                                    Reminder date
-                                  </p>
-                                  <input
-                                    type="datetime-local"
-                                    value={(pendingEdit.eventAt ?? "").slice(0, 16)}
-                                    onChange={(e) => setPendingEdit((p) => p ? { ...p, eventAt: e.target.value || null } : null)}
-                                    className="w-full h-8 px-2 text-xs rounded border border-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:border-gray-300"
-                                  />
-                                  {pendingEdit.eventAt && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setPendingEdit((p) => p ? { ...p, eventAt: null } : null)}
-                                      className="mt-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
-                                    >
-                                      Clear date
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-
-                              {saveError && (
-                                <p className="mt-1 px-1 text-[10px] text-red-500">{saveError}</p>
-                              )}
-                              <div className="mt-2 pt-2 border-t border-gray-100 px-1 flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => setPendingEdit((p) => p ? { ...p, status: "INTERESTED", interviewRound: null, eventAt: null } : null)}
-                                  className="flex-1 h-8 rounded-md border border-gray-200 text-xs text-gray-500 hover:bg-gray-50 transition-colors"
-                                >
-                                  Reset
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdate(app)}
-                                  disabled={pendingSaving}
-                                  className="flex-1 h-8 rounded-md bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                                >
-                                  {pendingSaving ? "Saving…" : "Update"}
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                          {isOpen && statusMenu(app)}
                         </>
                       );
                     })()}
@@ -593,6 +552,12 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                   className="p-1.5 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
                   <ExternalLink className="h-4 w-4" />
                 </a>
+                <ResumeReviewDialog
+                  listingId={app.listing.id}
+                  company={app.listing.company}
+                  role={app.listing.role}
+                  initialScore={reviewScores[app.listing.id] ?? null}
+                />
                 <button onClick={() => handleDelete(app.id)}
                   className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors">
                   <Trash2 className="h-4 w-4" />

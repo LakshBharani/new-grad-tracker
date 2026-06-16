@@ -48,6 +48,15 @@ export async function getResumeSignedUrl(
   return data.signedUrl;
 }
 
+/** Download a resume object's raw bytes (server-side, for sending to Gemini). */
+export async function downloadResumeBytes(path: string): Promise<Buffer> {
+  const supabase = getClient();
+  const { data, error } = await supabase.storage.from(BUCKET).download(path);
+  if (error) throw error;
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 /** Delete a resume object. */
 export async function deleteResume(path: string): Promise<void> {
   const supabase = getClient();

@@ -1,5 +1,5 @@
 export const STATUS_LABELS: Record<string, string> = {
-  INTERESTED: "Interested",
+  INTERESTED: "Not Applied",
   APPLIED: "Applied",
   OA: "OA",
   PHONE_SCREEN: "Phone Screen",

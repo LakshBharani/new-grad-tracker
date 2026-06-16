@@ -9,7 +9,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
-      <Navbar userName={session.user.name || session.user.email || "Friend"} />
+      <Navbar
+        userName={session.user.name || session.user.email || "Friend"}
+        userId={session.user.id as string}
+      />
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
       <Footer />
     </div>

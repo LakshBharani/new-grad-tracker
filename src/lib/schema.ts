@@ -72,3 +72,11 @@ export type User = typeof users.$inferSelect;
 export type Resume = typeof resumes.$inferSelect;
 export type Listing = typeof listings.$inferSelect;
 export type Application = typeof applications.$inferSelect;
+
+// Generic key→JSON cache for group-wide AI results (e.g. GC skill insights).
+export const aiCache = pgTable("ai_cache", {
+  key: text("key").primaryKey(),
+  valueJson: text("value_json").notNull(),
+  createdAt: text("created_at").notNull().default(isoNow),
+  updatedAt: text("updated_at").notNull().default(isoNow),
+});
