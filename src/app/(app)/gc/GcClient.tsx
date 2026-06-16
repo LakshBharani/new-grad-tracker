@@ -5,7 +5,6 @@ import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip,
 } from "recharts";
-import type { TooltipProps } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListingWithMeta } from "@/lib/types";
 
@@ -28,7 +27,13 @@ const STACK_KEYS = [
   { key: "Rejected",    fill: "#fca5a5" },
 ];
 
-function BarTooltip({ active, payload, label }: TooltipProps<number, string>) {
+type BarTooltipPayload = { value?: number; dataKey?: string | number; fill?: string };
+
+function BarTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: BarTooltipPayload[];
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + ((p.value as number) || 0), 0);
   return (

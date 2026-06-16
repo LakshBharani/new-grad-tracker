@@ -15,6 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const app = await upsertApplication({
     userId: session.user.id,
     listingId,
+    resumeId: body.resumeId,
     status: body.status,
     hasReferral: body.hasReferral,
     referralFrom: body.referralFrom,

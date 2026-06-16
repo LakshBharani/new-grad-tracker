@@ -21,14 +21,13 @@ function getClient() {
   return createClient(SUPABASE_URL, SUPABASE_KEY);
 }
 
-/** Upload a resume for a user. `file` may be a Blob, File, or Buffer. */
+/** Upload a resume to an explicit storage path. `file` may be a Blob, File, or Buffer. */
 export async function uploadResume(
-  userId: string,
+  path: string,
   file: Blob | Buffer | ArrayBuffer,
   contentType = "application/pdf"
 ): Promise<{ path: string }> {
   const supabase = getClient();
-  const path = `${userId}/resume.pdf`;
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, { contentType, upsert: true });

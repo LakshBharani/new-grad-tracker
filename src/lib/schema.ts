@@ -19,6 +19,17 @@ export const users = pgTable("users", {
   updatedAt: text("updated_at").notNull().default(isoNow),
 });
 
+// A user's stored resumes — each user can keep several (e.g. "SWE", "Data").
+export const resumes = pgTable("resumes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  storagePath: text("storage_path").notNull(),
+  fileName: text("file_name"),
+  createdAt: text("created_at").notNull().default(isoNow),
+  updatedAt: text("updated_at").notNull().default(isoNow),
+});
+
 // Shared job listings pool — anyone in the group can add a listing
 export const listings = pgTable("listings", {
   id: text("id").primaryKey(),
@@ -40,6 +51,7 @@ export const applications = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     listingId: text("listing_id").notNull().references(() => listings.id, { onDelete: "cascade" }),
+    resumeId: text("resume_id").references(() => resumes.id, { onDelete: "set null" }),
     status: text("status").notNull().default("INTERESTED"),
     hasReferral: boolean("has_referral").notNull().default(false),
     referralFrom: text("referral_from"),
@@ -57,5 +69,6 @@ export const applications = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
+export type Resume = typeof resumes.$inferSelect;
 export type Listing = typeof listings.$inferSelect;
 export type Application = typeof applications.$inferSelect;

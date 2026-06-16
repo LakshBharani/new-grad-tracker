@@ -367,9 +367,10 @@ export function DashboardClient({ listings: initialListings, currentUserId }: Pr
                           border: "1px solid #e5e7eb",
                           padding: "6px 10px",
                         }}
-                        formatter={(value: number, name: string) => {
-                          const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-                          return [`${value} (${pct}%)`, name];
+                        formatter={(value, name) => {
+                          const v = Number(value) || 0;
+                          const pct = total > 0 ? Math.round((v / total) * 100) : 0;
+                          return [`${v} (${pct}%)`, name];
                         }}
                       />
                     </PieChart>

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { users, listings, applications } from "./schema";
+import { users, listings, applications, resumes } from "./schema";
 import { eq, and, isNull, isNotNull, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import type { UserApplicationRow, ListingWithMeta } from "./types";
@@ -39,6 +39,42 @@ export async function updateUserResume(
     .set({ resumeUrl: data.resumeUrl, resumeText: data.resumeText, updatedAt: now })
     .where(eq(users.id, userId));
   return getUserById(userId);
+}
+
+// ─── Resumes ──────────────────────────────────────────────────────────────────
+
+export async function listResumes(userId: string) {
+  return db
+    .select()
+    .from(resumes)
+    .where(eq(resumes.userId, userId))
+    .orderBy(desc(resumes.createdAt));
+}
+
+export async function getResumeById(id: string) {
+  const r = await db.select().from(resumes).where(eq(resumes.id, id)).limit(1);
+  return r[0] ?? null;
+}
+
+export async function createResume(data: {
+  userId: string;
+  label: string;
+  storagePath: string;
+  fileName: string | null;
+}) {
+  const id = randomUUID();
+  await db.insert(resumes).values({ id, ...data });
+  return getResumeById(id);
+}
+
+export async function updateResume(id: string, data: { label: string }) {
+  const now = new Date().toISOString();
+  await db.update(resumes).set({ label: data.label, updatedAt: now }).where(eq(resumes.id, id));
+  return getResumeById(id);
+}
+
+export async function deleteResume(id: string) {
+  await db.delete(resumes).where(eq(resumes.id, id));
 }
 
 // ─── Listings ─────────────────────────────────────────────────────────────────
@@ -167,14 +203,15 @@ async function getAllApplicationsRaw(): Promise<UserApplicationRow[]> {
 
 export async function getMyApplication(userId: string, listingId: string): Promise<UserApplicationRow | null> {
   const rows = await db
-    .select({ app: applications, user: { id: users.id, name: users.name, email: users.email } })
+    .select({ app: applications, user: { id: users.id, name: users.name, email: users.email }, resumeLabel: resumes.label })
     .from(applications)
     .leftJoin(users, eq(applications.userId, users.id))
+    .leftJoin(resumes, eq(applications.resumeId, resumes.id))
     .where(and(eq(applications.userId, userId), eq(applications.listingId, listingId), isNull(applications.deletedAt)))
     .limit(1);
 
   if (!rows[0]) return null;
-  return { ...rows[0].app, hasReferral: Boolean(rows[0].app.hasReferral), user: rows[0].user ?? { id: "", name: "", email: "" } };
+  return { ...rows[0].app, hasReferral: Boolean(rows[0].app.hasReferral), resumeLabel: rows[0].resumeLabel ?? null, user: rows[0].user ?? { id: "", name: "", email: "" } };
 }
 
 export async function getMyApplications(userId: string, includeDeleted = false): Promise<(UserApplicationRow & { listing: typeof listings.$inferSelect })[]> {
@@ -183,16 +220,18 @@ export async function getMyApplications(userId: string, includeDeleted = false):
     : and(eq(applications.userId, userId), isNull(applications.deletedAt));
 
   const rows = await db
-    .select({ app: applications, user: { id: users.id, name: users.name, email: users.email }, listing: listings })
+    .select({ app: applications, user: { id: users.id, name: users.name, email: users.email }, listing: listings, resumeLabel: resumes.label })
     .from(applications)
     .leftJoin(users, eq(applications.userId, users.id))
     .leftJoin(listings, eq(applications.listingId, listings.id))
+    .leftJoin(resumes, eq(applications.resumeId, resumes.id))
     .where(where)
     .orderBy(desc(applications.createdAt));
 
-  return rows.map(({ app, user, listing: l }) => ({
+  return rows.map(({ app, user, listing: l, resumeLabel }) => ({
     ...app,
     hasReferral: Boolean(app.hasReferral),
+    resumeLabel: resumeLabel ?? null,
     user: user ?? { id: "", name: "", email: "" },
     listing: l!,
   }));
@@ -201,6 +240,7 @@ export async function getMyApplications(userId: string, includeDeleted = false):
 export async function upsertApplication(data: {
   userId: string;
   listingId: string;
+  resumeId?: string | null;
   status?: string;
   hasReferral?: boolean;
   referralFrom?: string | null;
@@ -215,6 +255,7 @@ export async function upsertApplication(data: {
 
   if (existing) {
     await db.update(applications).set({
+      resumeId: data.resumeId !== undefined ? data.resumeId : existing.resumeId,
       status: data.status ?? existing.status,
       hasReferral: data.hasReferral ?? existing.hasReferral,
       referralFrom: data.referralFrom !== undefined ? data.referralFrom : existing.referralFrom,
@@ -238,6 +279,7 @@ export async function upsertApplication(data: {
   if (deletedRows[0]) {
     const deleted = deletedRows[0];
     await db.update(applications).set({
+      resumeId: data.resumeId ?? null,
       status: data.status ?? "INTERESTED",
       hasReferral: data.hasReferral ?? false,
       referralFrom: data.referralFrom ?? null,
@@ -256,6 +298,7 @@ export async function upsertApplication(data: {
     id,
     userId: data.userId,
     listingId: data.listingId,
+    resumeId: data.resumeId ?? null,
     status: data.status ?? "INTERESTED",
     hasReferral: data.hasReferral ?? false,
     referralFrom: data.referralFrom ?? null,

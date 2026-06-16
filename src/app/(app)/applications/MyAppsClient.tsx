@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { ExternalLink, GitBranch, StickyNote, Calendar, CalendarClock, Trash2, ChevronDown, Plus } from "lucide-react";
+import { ExternalLink, GitBranch, StickyNote, Calendar, CalendarClock, Trash2, ChevronDown, Plus, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -88,6 +88,25 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
   const [notesText, setNotesText] = useState("");
   const [notesSaving, setNotesSaving] = useState(false);
 
+  // Resume picker dialog
+  const [resumeTarget, setResumeTarget] = useState<AppWithListing | null>(null);
+  const [resumeChoice, setResumeChoice] = useState<string | null>(null);
+  const [resumeSaving, setResumeSaving] = useState(false);
+  const [resumeOptions, setResumeOptions] = useState<{ id: string; label: string }[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/resume")
+      .then((r) => (r.ok ? r.json() : { resumes: [] }))
+      .then((d) => {
+        if (active) setResumeOptions((d.resumes ?? []).map((x: { id: string; label: string }) => ({ id: x.id, label: x.label })));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filtered = useMemo(() => apps.filter((a) => {
     if (search && !`${a.listing.company} ${a.listing.role}`.toLowerCase().includes(search.toLowerCase())) return false;
     if (statusFilter !== "ALL" && a.status !== statusFilter) return false;
@@ -112,6 +131,11 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
     setNotesTarget(app);
   };
 
+  const openResume = (app: AppWithListing) => {
+    setResumeChoice(app.resumeId ?? null);
+    setResumeTarget(app);
+  };
+
   const save = async (listingId: string, patch: Record<string, unknown>) => {
     const res = await fetch(`/api/listings/${listingId}/apply`, {
       method: "POST",
@@ -120,32 +144,6 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
     });
     if (!res.ok) throw new Error("Failed to save");
     return res.json();
-  };
-
-  const handleQuickStatus = async (app: AppWithListing, newStatus: string) => {
-    const today = new Date().toISOString().split("T")[0];
-    let appliedAt: string | null = app.appliedAt ?? null;
-
-    if (newStatus === "INTERESTED") {
-      if (app.status !== "WITHDRAWN") appliedAt = null;
-    } else if (app.status === "INTERESTED" && !app.appliedAt) {
-      appliedAt = today;
-    }
-
-    // Interview-round defaulting:
-    // - First time entering any interview stage → round 1
-    // - Bouncing between interview stages → preserve existing round
-    // - Leaving interview stages → keep round as-is so the Sankey can use it later
-    const isInterviewStage = INTERVIEW_STAGES.includes(newStatus);
-    const interviewRound = isInterviewStage
-      ? (app.interviewRound ?? 1)
-      : app.interviewRound;
-
-    // Preserve eventAt when staying in event stages; clear when leaving.
-    const eventAt = EVENT_STAGES.includes(newStatus) ? (app.eventAt ?? null) : null;
-
-    const updated = await save(app.listingId, { status: newStatus, appliedAt, eventAt, interviewRound });
-    setApps((prev) => prev.map((a) => a.id === app.id ? { ...a, ...updated } : a));
   };
 
   const handleUpdate = async (app: AppWithListing) => {
@@ -199,6 +197,18 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
       setNotesTarget(null);
     } finally {
       setNotesSaving(false);
+    }
+  };
+
+  const handleResumeSave = async () => {
+    if (!resumeTarget) return;
+    setResumeSaving(true);
+    try {
+      const updated = await save(resumeTarget.listingId, { resumeId: resumeChoice });
+      setApps((prev) => prev.map((a) => a.id === resumeTarget.id ? { ...a, ...updated } : a));
+      setResumeTarget(null);
+    } finally {
+      setResumeSaving(false);
     }
   };
 
@@ -299,6 +309,12 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                       <span className="truncate">{app.notes}</span>
                     </span>
                   )}
+                  {app.resumeLabel && (
+                    <span className="flex items-center gap-1 text-rose-500 font-medium max-w-[200px]">
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{app.resumeLabel}</span>
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -310,7 +326,6 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                         href={app.listing.link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => handleQuickStatus(app, "APPLIED")}
                         className="flex-1 px-3 flex items-center justify-start font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
                       >
                         Apply
@@ -405,8 +420,19 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                               role="menu"
                               className="absolute top-full right-0 mt-1.5 z-20 w-64 rounded-lg border border-gray-200 bg-white shadow-xl p-1.5"
                             >
-                              {STATUS_GROUPS.map((group, gi) => (
-                                <div key={group.label} className={gi > 0 ? "mt-1 pt-1 border-t border-gray-100" : ""}>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => setPendingEdit((p) => p ? { ...p, status: "INTERESTED", eventAt: null } : null)}
+                                className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-xs transition-colors ${
+                                  pendingEdit.status === "INTERESTED" ? "bg-gray-50 font-semibold text-gray-900" : "text-gray-700 hover:bg-gray-50"
+                                }`}
+                              >
+                                <span className="h-2 w-2 rounded-full shrink-0 bg-gray-300" />
+                                <span className="flex-1 text-left">Not applied</span>
+                              </button>
+                              {STATUS_GROUPS.map((group) => (
+                                <div key={group.label} className="mt-1 pt-1 border-t border-gray-100">
                                   <p className="px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                                     {group.label}
                                   </p>
@@ -551,6 +577,18 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
                   <StickyNote className="h-4 w-4" />
                 </button>
 
+                {/* Resume icon */}
+                <button
+                  onClick={() => openResume(app)}
+                  title={app.resumeLabel ? `Resume: ${app.resumeLabel}` : "Set resume used"}
+                  className={`p-1.5 rounded transition-colors ${
+                    app.resumeId
+                      ? "text-rose-500 bg-rose-50 hover:bg-rose-100"
+                      : "text-gray-400 hover:text-rose-500 hover:bg-rose-50"
+                  }`}>
+                  <FileText className="h-4 w-4" />
+                </button>
+
                 <a href={app.listing.link} target="_blank" rel="noopener noreferrer"
                   className="p-1.5 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors">
                   <ExternalLink className="h-4 w-4" />
@@ -608,6 +646,44 @@ export function MyAppsClient({ initialApps, currentUserId }: Props) {
               <Button variant="outline" onClick={() => setNotesTarget(null)}>Cancel</Button>
               <Button onClick={handleNotesSave} disabled={notesSaving}>
                 {notesSaving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resume dialog */}
+      <Dialog open={!!resumeTarget} onOpenChange={(o) => !o && setResumeTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Resume used — {resumeTarget?.listing.company}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            {resumeOptions.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                You don&apos;t have any resumes yet. Add one on the Resumes page first.
+              </p>
+            ) : (
+              <Select
+                value={resumeChoice ?? "__none__"}
+                onValueChange={(v) => setResumeChoice(v === "__none__" ? null : v)}
+              >
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {resumeOptions.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-xs text-gray-500">
+              Mark which resume you used to apply to this role.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setResumeTarget(null)}>Cancel</Button>
+              <Button onClick={handleResumeSave} disabled={resumeSaving || resumeOptions.length === 0}>
+                {resumeSaving ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>

@@ -58,6 +58,8 @@ export type UserApplicationRow = {
   id: string;
   userId: string;
   listingId: string;
+  resumeId: string | null;
+  resumeLabel?: string | null;
   status: string;
   hasReferral: boolean;
   referralFrom: string | null;

@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { STATUS_ORDER, STATUS_LABELS, EVENT_STAGES, ListingWithMeta } from "@/lib/types";
 
+const NONE = "__none__";
+
+type ResumeOption = { id: string; label: string };
+
 type FormData = {
   status: string;
+  resumeId: string | null;
   hasReferral: boolean;
   referralFrom: string;
   notes: string;
@@ -16,7 +21,7 @@ type FormData = {
   eventAt: string;
 };
 
-const DEFAULT: FormData = { status: "INTERESTED", hasReferral: false, referralFrom: "", notes: "", appliedAt: "", eventAt: "" };
+const DEFAULT: FormData = { status: "INTERESTED", resumeId: null, hasReferral: false, referralFrom: "", notes: "", appliedAt: "", eventAt: "" };
 
 type Props = {
   listing: ListingWithMeta;
@@ -27,10 +32,24 @@ type Props = {
 
 export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
   const [form, setForm] = useState<FormData>({ ...DEFAULT, ...initial });
+  const [resumes, setResumes] = useState<ResumeOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (k: keyof FormData, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+  useEffect(() => {
+    let active = true;
+    fetch("/api/resume")
+      .then((r) => (r.ok ? r.json() : { resumes: [] }))
+      .then((d) => {
+        if (active) setResumes((d.resumes ?? []).map((x: ResumeOption) => ({ id: x.id, label: x.label })));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const set = (k: keyof FormData, v: string | boolean | null) => setForm((f) => ({ ...f, [k]: v }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +82,27 @@ export function ApplyForm({ listing, initial, onSubmit, onCancel }: Props) {
       <div className="space-y-1">
         <label className="text-sm font-medium text-gray-700">Applied Date</label>
         <Input type="date" value={form.appliedAt} onChange={(e) => set("appliedAt", e.target.value)} />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-sm font-medium text-gray-700">Resume used</label>
+        <Select
+          value={form.resumeId ?? NONE}
+          onValueChange={(v) => set("resumeId", v === NONE ? null : v)}
+        >
+          <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>— None —</SelectItem>
+            {resumes.map((r) => (
+              <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {resumes.length === 0 && (
+          <p className="text-xs text-gray-400">
+            No resumes yet — add one on the Resumes page to track which you used.
+          </p>
+        )}
       </div>
 
       {EVENT_STAGES.includes(form.status) && (

@@ -2,21 +2,27 @@
 
 import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, ExternalLink, FileText, Trash2, Eye, FileCode } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Upload, ExternalLink, FileText, Trash2, Eye, FileCode, Pencil } from "lucide-react";
+
+export type ResumeItem = {
+  id: string;
+  label: string;
+  fileName: string | null;
+  createdAt: string;
+  signedUrl: string | null;
+};
 
 type Props = {
-  initialSignedUrl: string | null;
-  initialText: string | null;
-  hasResume: boolean;
+  initialResumes: ResumeItem[];
 };
 
 type Builder = {
   name: string;
   tagline: string;
   href: string;
-  // External image first; if it fails we fall back to a lucide icon.
   logoUrl: string;
-  accent: string; // tailwind bg-* class for the fallback tile
+  accent: string;
 };
 
 const BUILDERS: Builder[] = [
@@ -75,11 +81,11 @@ function BuilderCard({ b }: { b: Builder }) {
   );
 }
 
-export function ResumesClient({ initialSignedUrl, initialText, hasResume: initialHasResume }: Props) {
-  const [signedUrl, setSignedUrl] = useState<string | null>(initialSignedUrl);
-  const [text, setText] = useState<string | null>(initialText);
-  const [hasResume, setHasResume] = useState(initialHasResume);
+export function ResumesClient({ initialResumes }: Props) {
+  const [resumes, setResumes] = useState<ResumeItem[]>(initialResumes);
+  const [label, setLabel] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -98,12 +104,12 @@ export function ResumesClient({ initialSignedUrl, initialText, hasResume: initia
     try {
       const form = new FormData();
       form.append("file", file);
+      if (label.trim()) form.append("label", label.trim());
       const res = await fetch("/api/resume", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setSignedUrl(data.signedUrl);
-      setText(data.text ?? "");
-      setHasResume(true);
+      setResumes((prev) => [data.resume as ResumeItem, ...prev]);
+      setLabel("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -119,20 +125,40 @@ export function ResumesClient({ initialSignedUrl, initialText, hasResume: initia
     if (file) handleUpload(file);
   }
 
-  async function handleDelete() {
-    if (!confirm("Delete your uploaded resume?")) return;
+  async function handleRename(r: ResumeItem) {
+    const next = window.prompt("Rename resume", r.label);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === r.label) return;
+    setBusyId(r.id);
     setError(null);
-    setUploading(true);
     try {
-      const res = await fetch("/api/resume", { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
-      setSignedUrl(null);
-      setText(null);
-      setHasResume(false);
+      const res = await fetch(`/api/resume/${r.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: trimmed }),
+      });
+      if (!res.ok) throw new Error("Rename failed");
+      setResumes((prev) => prev.map((x) => (x.id === r.id ? { ...x, label: trimmed } : x)));
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setUploading(false);
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(r: ResumeItem) {
+    if (!confirm(`Delete "${r.label}"? Applications using it will keep their entry but lose the link.`)) return;
+    setBusyId(r.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/resume/${r.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setResumes((prev) => prev.filter((x) => x.id !== r.id));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -141,7 +167,7 @@ export function ResumesClient({ initialSignedUrl, initialText, hasResume: initia
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Resumes</h1>
         <p className="mt-0.5 text-sm text-gray-400">
-          Build a strong resume and keep a copy on file for tailoring later.
+          Keep multiple resumes on file and pick which one you used for each application.
         </p>
       </div>
 
@@ -157,91 +183,56 @@ export function ResumesClient({ initialSignedUrl, initialText, hasResume: initia
         </div>
       </section>
 
-      {/* Your resume */}
+      {/* Add a resume */}
       <Card className="border-0 shadow-sm">
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold text-gray-700">Your resume</CardTitle>
-          {hasResume && (
-            <div className="flex items-center gap-2">
-              {signedUrl && (
-                <a
-                  href={signedUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  View
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Replace
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={uploading}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            </div>
-          )}
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-gray-700">Add a resume</CardTitle>
         </CardHeader>
-        <CardContent>
-          {!hasResume ? (
-            <label
-              htmlFor="resume-upload"
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (!dragOver) setDragOver(true);
-              }}
-              onDragEnter={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={(e) => {
-                // Only flip off when leaving the label itself (not crossing children).
-                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                setDragOver(false);
-              }}
-              onDrop={handleDrop}
-              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-10 transition-colors ${
-                dragOver
-                  ? "border-indigo-400 bg-indigo-50"
-                  : "border-gray-200 bg-gray-50/50 hover:border-indigo-300 hover:bg-indigo-50/30"
-              }`}
-            >
-              <Upload className={`h-7 w-7 ${dragOver ? "text-indigo-500" : "text-gray-400"}`} />
-              <span className="text-sm font-medium text-gray-700">
-                {uploading
-                  ? "Uploading…"
-                  : dragOver
-                  ? "Drop to upload"
-                  : "Drop a PDF here, or click to browse"}
-              </span>
-              <span className="text-xs text-gray-400">PDF only · up to 5 MB</span>
+        <CardContent className="space-y-3">
+          <div className="space-y-1">
+            <label htmlFor="resume-label" className="text-xs font-medium text-gray-500">
+              Label (optional)
             </label>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100">
-                  <FileText className="h-5 w-5 text-rose-600" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">resume.pdf</p>
-                  <p className="text-xs text-gray-400">Stored on Supabase</p>
-                </div>
-              </div>
-            </div>
-          )}
+            <Input
+              id="resume-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder='e.g. "SWE Resume" or "Data Science v2"'
+              maxLength={80}
+            />
+          </div>
+
+          <label
+            htmlFor="resume-upload"
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!dragOver) setDragOver(true);
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragOver(false);
+            }}
+            onDrop={handleDrop}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed py-10 transition-colors ${
+              dragOver
+                ? "border-indigo-400 bg-indigo-50"
+                : "border-gray-200 bg-gray-50/50 hover:border-indigo-300 hover:bg-indigo-50/30"
+            }`}
+          >
+            <Upload className={`h-7 w-7 ${dragOver ? "text-indigo-500" : "text-gray-400"}`} />
+            <span className="text-sm font-medium text-gray-700">
+              {uploading
+                ? "Uploading…"
+                : dragOver
+                ? "Drop to upload"
+                : "Drop a PDF here, or click to browse"}
+            </span>
+            <span className="text-xs text-gray-400">PDF only · up to 5 MB</span>
+          </label>
 
           <input
             ref={fileRef}
@@ -255,8 +246,70 @@ export function ResumesClient({ initialSignedUrl, initialText, hasResume: initia
             }}
           />
 
-          {error && (
-            <p className="mt-3 text-xs text-rose-600">{error}</p>
+          {error && <p className="text-xs text-rose-600">{error}</p>}
+        </CardContent>
+      </Card>
+
+      {/* Your resumes */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-gray-700">
+            Your resumes {resumes.length > 0 && <span className="text-gray-400">({resumes.length})</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {resumes.length === 0 ? (
+            <p className="py-6 text-center text-sm text-gray-400">
+              No resumes yet — add one above to get started.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {resumes.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rose-100">
+                    <FileText className="h-5 w-5 text-rose-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-900">{r.label}</p>
+                    <p className="truncate text-xs text-gray-400">{r.fileName ?? "resume.pdf"}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {r.signedUrl && (
+                      <a
+                        href={r.signedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                        View
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRename(r)}
+                      disabled={busyId === r.id}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(r)}
+                      disabled={busyId === r.id}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>

@@ -367,6 +367,7 @@ export function BoardClient({ listings: initial, users, currentUserId }: Props) 
                 listing={applyTarget}
                 initial={myApp ? {
                   status: myApp.status,
+                  resumeId: myApp.resumeId,
                   hasReferral: myApp.hasReferral,
                   referralFrom: myApp.referralFrom ?? "",
                   notes: myApp.notes ?? "",

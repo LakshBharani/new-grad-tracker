@@ -58,6 +58,30 @@ CREATE TABLE IF NOT EXISTS applications (
 CREATE UNIQUE INDEX IF NOT EXISTS applications_user_listing_idx
   ON applications (user_id, listing_id);
 
+-- A user can store several resumes; applications reference which one was used.
+CREATE TABLE IF NOT EXISTS resumes (
+  id            text PRIMARY KEY,
+  user_id       text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label         text NOT NULL,
+  storage_path  text NOT NULL,
+  file_name     text,
+  created_at    text NOT NULL DEFAULT iso_now(),
+  updated_at    text NOT NULL DEFAULT iso_now()
+);
+
+ALTER TABLE applications
+  ADD COLUMN IF NOT EXISTS resume_id text REFERENCES resumes(id) ON DELETE SET NULL;
+
+-- Migrate any pre-existing single resume (users.resume_url) into the resumes
+-- table as "My Resume". Idempotent: skips users already migrated to that path.
+INSERT INTO resumes (id, user_id, label, storage_path, file_name)
+SELECT gen_random_uuid()::text, u.id, 'My Resume', u.resume_url, 'resume.pdf'
+FROM users u
+WHERE u.resume_url IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM resumes r WHERE r.user_id = u.id AND r.storage_path = u.resume_url
+  );
+
 -- ─── Row Level Security ─────────────────────────────────────────────────────
 -- The app uses NextAuth (server-side) and connects with the Postgres role,
 -- not via Supabase Auth, so RLS is not enforced for app traffic. We still
@@ -67,6 +91,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS applications_user_listing_idx
 ALTER TABLE users        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE listings     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE resumes      ENABLE ROW LEVEL SECURITY;
 
 -- (No policies defined → all PostgREST access is denied. The Node app
 --  connects with the Postgres user from DATABASE_URL which bypasses RLS.)
@@ -77,3 +102,22 @@ ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 INSERT INTO storage.buckets (id, name, public)
   VALUES ('resumes', 'resumes', false)
   ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS policies: the app talks to Storage with the anon/publishable key,
+-- so storage.objects RLS applies. Authorization is enforced server-side by
+-- NextAuth + per-user storage paths (`${userId}/...`); these policies simply let
+-- the app read/write objects in the private `resumes` bucket. Object listing is
+-- never exposed to the browser — the server hands out short-lived signed URLs.
+DROP POLICY IF EXISTS "resumes_select" ON storage.objects;
+DROP POLICY IF EXISTS "resumes_insert" ON storage.objects;
+DROP POLICY IF EXISTS "resumes_update" ON storage.objects;
+DROP POLICY IF EXISTS "resumes_delete" ON storage.objects;
+
+CREATE POLICY "resumes_select" ON storage.objects
+  FOR SELECT TO anon, authenticated USING (bucket_id = 'resumes');
+CREATE POLICY "resumes_insert" ON storage.objects
+  FOR INSERT TO anon, authenticated WITH CHECK (bucket_id = 'resumes');
+CREATE POLICY "resumes_update" ON storage.objects
+  FOR UPDATE TO anon, authenticated USING (bucket_id = 'resumes') WITH CHECK (bucket_id = 'resumes');
+CREATE POLICY "resumes_delete" ON storage.objects
+  FOR DELETE TO anon, authenticated USING (bucket_id = 'resumes');
