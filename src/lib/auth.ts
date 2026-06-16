@@ -5,10 +5,6 @@ import bcrypt from "bcryptjs";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-  // Trust the deployment's host header so auth redirects use the real domain
-  // (e.g. the Vercel URL) instead of a hardcoded NEXTAUTH_URL. Required for
-  // correct redirects on Vercel preview/production deployments.
-  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",
