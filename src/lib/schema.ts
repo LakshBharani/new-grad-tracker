@@ -8,6 +8,7 @@ const isoNow = sql`to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD"T"HH24:MI:SS.
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
+  username: text("username").notNull().unique(),
   name: text("name").notNull(),
   password: text("password").notNull(),
   role: text("role").notNull().default("USER"),
@@ -72,6 +73,17 @@ export type User = typeof users.$inferSelect;
 export type Resume = typeof resumes.$inferSelect;
 export type Listing = typeof listings.$inferSelect;
 export type Application = typeof applications.$inferSelect;
+
+// Single-use invite codes — a member generates a random code to onboard a friend.
+export const invites = pgTable("invites", {
+  code: text("code").primaryKey(),
+  createdById: text("created_by_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  usedById: text("used_by_id").references(() => users.id, { onDelete: "set null" }),
+  usedAt: text("used_at"),
+  createdAt: text("created_at").notNull().default(isoNow),
+});
+
+export type Invite = typeof invites.$inferSelect;
 
 // Generic key→JSON cache for group-wide AI results (e.g. GC skill insights).
 export const aiCache = pgTable("ai_cache", {

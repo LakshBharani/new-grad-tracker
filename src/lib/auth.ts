@@ -9,16 +9,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Credentials({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        identifier: { label: "Email or username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.identifier || !credentials?.password) return null;
 
         // Lazy import to avoid Edge Runtime issues — only runs in Node.js
-        const { getUserByEmail } = await import("./db-helpers");
-        const email = (credentials.email as string).trim().toLowerCase();
-        const user = await getUserByEmail(email);
+        const { getUserByIdentifier } = await import("./db-helpers");
+        const user = await getUserByIdentifier(credentials.identifier as string);
         if (!user) return null;
 
         const match = await bcrypt.compare(credentials.password as string, user.password);

@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { BarChart3, Globe, Bookmark, Users, FileText, Trash2, LogOut, Settings, Wand2, ChevronDown, UserRound } from "lucide-react";
+import { BarChart3, Globe, Bookmark, Users, FileText, Trash2, LogOut, Settings, Wand2, ChevronDown, UserRound, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
+import { InviteFriendDialog } from "@/components/InviteFriendDialog";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
@@ -25,6 +26,7 @@ const MENU_ITEMS = [
 export function Navbar({ userName, userId }: { userName: string; userId: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -106,6 +108,18 @@ export function Navbar({ userName, userId }: { userName: string; userId: string 
                     <UserRound className="h-4 w-4 text-gray-400" />
                     My profile
                   </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      setInviteOpen(true);
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    <UserPlus className="h-4 w-4 text-gray-400" />
+                    Invite a friend
+                  </button>
                   {MENU_ITEMS.map(({ href, label, icon: Icon }) => (
                     <Link
                       key={href}
@@ -140,6 +154,8 @@ export function Navbar({ userName, userId }: { userName: string; userId: string 
           </div>
         </div>
       </div>
+
+      <InviteFriendDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </nav>
   );
 }

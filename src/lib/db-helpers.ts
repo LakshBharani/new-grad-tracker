@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { users, listings, applications, resumes, aiCache } from "./schema";
-import { eq, and, isNull, isNotNull, desc, like } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { users, listings, applications, resumes, aiCache, invites } from "./schema";
+import { eq, and, isNull, isNotNull, desc, like, or, sql } from "drizzle-orm";
+import { randomUUID, randomBytes } from "crypto";
 import type { UserApplicationRow, ListingWithMeta } from "./types";
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -16,14 +16,30 @@ export async function getUserByEmail(email: string) {
   return r[0] ?? null;
 }
 
+export async function getUserByUsername(username: string) {
+  const r = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  return r[0] ?? null;
+}
+
+// Look up a user by either their email or their username (both stored lowercased).
+export async function getUserByIdentifier(identifier: string) {
+  const id = identifier.trim().toLowerCase();
+  const r = await db
+    .select()
+    .from(users)
+    .where(or(eq(users.email, id), eq(users.username, id)))
+    .limit(1);
+  return r[0] ?? null;
+}
+
 export async function getAllUsers() {
   return db
-    .select({ id: users.id, name: users.name, email: users.email, role: users.role, createdAt: users.createdAt })
+    .select({ id: users.id, name: users.name, email: users.email, username: users.username, role: users.role, createdAt: users.createdAt })
     .from(users)
     .orderBy(users.name);
 }
 
-export async function createUser(data: { name: string; email: string; password: string }) {
+export async function createUser(data: { name: string; email: string; username: string; password: string }) {
   const id = randomUUID();
   await db.insert(users).values({ id, ...data, role: "USER" });
   return getUserById(id);
@@ -39,6 +55,50 @@ export async function updateUserResume(
     .set({ resumeUrl: data.resumeUrl, resumeText: data.resumeText, updatedAt: now })
     .where(eq(users.id, userId));
   return getUserById(userId);
+}
+
+// ─── Invites ──────────────────────────────────────────────────────────────────
+
+// Generate a short, human-friendly, hard-to-guess invite code (e.g. "K7P2-9QX4").
+function generateInviteCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I
+  const bytes = randomBytes(8);
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += alphabet[bytes[i] % alphabet.length];
+    if (i === 3) out += "-";
+  }
+  return out;
+}
+
+// Create a fresh single-use invite owned by the given member.
+export async function createInvite(createdById: string) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateInviteCode();
+    try {
+      await db.insert(invites).values({ code, createdById });
+      return code;
+    } catch {
+      // Unique-collision on code — retry with a new one.
+    }
+  }
+  throw new Error("Could not generate a unique invite code");
+}
+
+export async function getInvite(code: string) {
+  const r = await db.select().from(invites).where(eq(invites.code, code)).limit(1);
+  return r[0] ?? null;
+}
+
+// Atomically claim an unused invite. Returns true if the code was valid & unused.
+export async function consumeInvite(code: string, usedById: string) {
+  const now = new Date().toISOString();
+  const r = await db
+    .update(invites)
+    .set({ usedById, usedAt: now })
+    .where(and(eq(invites.code, code), isNull(invites.usedById)))
+    .returning({ code: invites.code });
+  return r.length > 0;
 }
 
 // ─── Resumes ──────────────────────────────────────────────────────────────────

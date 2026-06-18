@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,15 @@ import { Logo } from "@/components/Logo";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", email: "", password: "", inviteCode: "" });
+  const [form, setForm] = useState({ name: "", username: "", email: "", password: "", inviteCode: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Prefill the invite code from a shared link (e.g. /register?code=ABCD-1234).
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("code");
+    if (code) setForm((f) => ({ ...f, inviteCode: code }));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +61,17 @@ export default function RegisterPage() {
                 value={form.name}
                 onChange={(e) => set("name", e.target.value)}
                 placeholder="Adi"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Username</label>
+              <Input
+                value={form.username}
+                onChange={(e) => set("username", e.target.value.toLowerCase())}
+                placeholder="adi99"
+                pattern="[a-z0-9_]{3,20}"
+                title="3–20 characters: lowercase letters, numbers, or underscores"
                 required
               />
             </div>

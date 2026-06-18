@@ -10,7 +10,7 @@ import { Logo } from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,13 +21,13 @@ export default function LoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      email,
+      identifier,
       password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Invalid email or password");
+      setError("Invalid login or password");
       setLoading(false);
     } else {
       router.push("/");
@@ -48,12 +48,12 @@ export default function LoginPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">Email</label>
+              <label className="text-sm font-medium text-gray-700">Email or username</label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="you@example.com or username"
                 required
               />
             </div>
