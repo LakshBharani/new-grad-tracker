@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, email, password, inviteCode } = body;
+  const { name, password, inviteCode } = body;
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
 
   if (inviteCode !== process.env.INVITE_CODE && inviteCode !== "friends2024") {
     return NextResponse.json({ error: "Invalid invite code" }, { status: 403 });

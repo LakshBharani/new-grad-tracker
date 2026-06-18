@@ -17,7 +17,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Lazy import to avoid Edge Runtime issues — only runs in Node.js
         const { getUserByEmail } = await import("./db-helpers");
-        const user = await getUserByEmail(credentials.email as string);
+        const email = (credentials.email as string).trim().toLowerCase();
+        const user = await getUserByEmail(email);
         if (!user) return null;
 
         const match = await bcrypt.compare(credentials.password as string, user.password);
